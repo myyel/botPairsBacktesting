@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Araç cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Veri ve sonuçlar (CLAUDE.md §7)
+data/**
+!data/**/
+!data/**/.gitkeep
+artifacts/**
+!artifacts/.gitkeep
+
+# Notebook çıktıları
+.ipynb_checkpoints/
+
+# Gizli bilgiler
+.env
+*.key
+
+# Claude Code kişisel ayarları
+.claude/settings.local.json
+CLAUDE.local.md
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Eski bot kodu (yalnız yerelde referans)
+old/

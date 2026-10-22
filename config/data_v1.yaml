@@ -1,0 +1,32 @@
+# Faz 1 veri seti (RAPOR §4). Tarihler UTC gün sınırları, dahil.
+# 2025-09-01: walk_forward.start (ilk OOS, 2025-10-01) öncesi 28 günlük formation için.
+start_date: 2025-09-01
+end_date: 2026-09-30
+datasets: [klines_1m, klines_5m, fundingRate]   # aggTrades: toplu indirme Faz 4
+
+universe:
+  quote_asset: USDT
+  contract_types: [PERPETUAL]   # TRADIFI_PERPETUAL bilinçli olarak hariç (RAPOR §8.1)
+  include_symbols: []           # boş = arşivdeki tüm semboller (delist dahil)
+  exclude_symbols: []
+
+paths:
+  raw_dir: data/raw
+  normalized_dir: data/normalized
+  parquet_dir: data/parquet
+  manifests_dir: data/manifests
+
+download:
+  archive_base_url: https://data.binance.vision
+  s3_listing_url: https://s3-ap-northeast-1.amazonaws.com/data.binance.vision
+  exchange_info_url: https://fapi.binance.com/fapi/v1/exchangeInfo
+  max_workers: 8
+  max_retries: 5
+  backoff_base_seconds: 1.0
+  timeout_seconds: 60
+
+validation:
+  crosscheck_price_rel_tol: 1.0e-9
+  crosscheck_volume_rel_tol: 1.0e-6
+  max_examples: 20
+  tick_grid_min_fraction: 0.999   # türetilen tick fiyatların >= %99.9'unu kapsamalı

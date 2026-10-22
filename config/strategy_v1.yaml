@@ -1,0 +1,70 @@
+# ACKPT-50 V1 başlangıç konfigürasyonu (RAPOR §3.5 ve §14.2)
+# Bu değerler "doğru" parametreler değil; walk-forward ile kalibre edilecek başlangıç hipotezleridir.
+run:
+  name: ackpt50_v1
+  seed: 42
+  initial_equity_usdt: 10000.0
+
+market:
+  venue: binance_um
+  quote_asset: USDT
+  execution_interval: 1m
+  formation_interval: 5m
+  max_ffill_bars: 3
+  min_listing_age_days: 30
+  min_quote_volume_24h_usdt: 20000000
+  exclude_symbols: []          # ör. stablecoin benzeri ürünler
+
+pair_selection:
+  short_window_days: 7
+  long_window_days: 28
+  refresh_hours: 4
+  adf_p_short: 0.01
+  adf_p_long: 0.05
+  min_corr: 0.60
+  max_hurst: 0.45
+  half_life_minutes: [3, 45]
+  active_pairs: 30
+  max_pairs_per_asset: 2
+  score_weights:               # RAPOR §8.3 — test dönemine göre optimize ETME
+    coint_stability: 0.25
+    mean_reversion_quality: 0.20
+    expected_net_edge: 0.20
+    liquidity: 0.15
+    beta_stability: 0.10
+    diversification: 0.10
+
+models:
+  kalman:
+    delta: 1.0e-5              # state transition kovaryans ölçeği
+    obs_var: 1.0e-3            # gözlem gürültüsü başlangıç varyansı
+  zscore:
+    ewma_halflife_bars: 60
+
+signal:
+  entry_z: 1.80
+  exit_z: 0.25
+  stop_z: 3.20
+  min_net_edge_bps: 8.0
+  cost_multiplier: 3.0
+  max_holding_hl_mult: 2.5
+  max_holding_minutes: 60
+  require_reversion_trigger: true
+
+risk:
+  pair_risk_pct: 0.00075
+  max_open_pairs: 8
+  daily_soft_stop_pct: -0.003
+  daily_hard_stop_pct: -0.005
+  max_leverage: 3.0
+
+execution:
+  model: hybrid                # conservative_taker | maker_touch | hybrid
+  maker_timeout_seconds: 3
+  leg_timeout_seconds: 1
+  leg_timeout_action: aggress  # aggress | unwind
+  latency_ms: 150
+  queue_haircut: 0.5
+
+costs_file: config/costs_conservative.yaml
+walk_forward_file: config/walk_forward.yaml

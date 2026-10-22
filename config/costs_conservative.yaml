@@ -1,0 +1,26 @@
+# Konservatif maliyet senaryosu (RAPOR §10). Fee'ler hesap tier'ına göre değişir;
+# gerçek tier değerlerini buraya girin. Değerler bps (1 bps = 0.01%).
+fees:
+  source: config               # config | account_tier
+  maker_bps: 2.0
+  taker_bps: 5.0
+  bnb_discount: false
+
+slippage:                      # slippage_bps = base + k1*(notional/bar_quote_vol) + k2*vol_1m + stress
+  model: liquidity_scaled
+  base_bps: 1.0
+  k1: 50.0
+  k2: 0.5
+  stress_addon_bps: 0.0
+
+funding:
+  enabled: true
+  interval_hours: 8            # sembol bazında exchange verisi önceliklidir
+
+leg_risk:
+  reserve_bps: 1.5
+
+stress_scenarios:              # RAPOR §13 — stres sonuçları ana sonuçtan önemli
+  fee_x1_5: {fee_mult: 1.5}
+  slip_x2: {slippage_mult: 2.0}
+  all_taker: {force_taker: true}

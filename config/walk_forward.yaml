@@ -1,0 +1,8 @@
+# RAPOR §12 — 28 gün formation / 7 gün OOS rolling walk-forward
+start: "2025-10-01T00:00:00Z"
+end: "2026-09-30T23:59:59Z"
+formation_days: 28
+test_days: 7
+step_days: 7
+embargo_minutes: 0             # formation ile test arasında boşluk (gerekirse artır)
+open_position_policy_on_refresh: grandfather   # grandfather | force_exit
