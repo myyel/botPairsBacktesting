@@ -12,8 +12,14 @@ market:
   formation_interval: 5m
   max_ffill_bars: 3
   min_listing_age_days: 30
-  min_quote_volume_24h_usdt: 20000000
-  exclude_symbols: []          # ör. stablecoin benzeri ürünler
+  min_quote_volume_24h_usdt: 20000000   # formation'daki 24 saatlik blokların medyanı
+  min_coverage: 0.98           # formation penceresinde stale olmayan bar oranı
+  max_zero_trade_frac: 0.05    # işlemsiz bar oranı üst sınırı
+  contract_types: [PERPETUAL]  # TRADIFI_PERPETUAL bilinçli olarak hariç (RAPOR §8.1)
+  exclude_symbols:             # RAPOR §8.1: stablecoin / emtia tokenı (yapısal olarak farklı)
+    - USDCUSDT
+    - PAXGUSDT
+    - XAUTUSDT
 
 pair_selection:
   short_window_days: 7
@@ -26,6 +32,17 @@ pair_selection:
   half_life_minutes: [3, 45]
   active_pairs: 30
   max_pairs_per_asset: 2
+  eg_direction: min_p          # iki yön test edilir, düşük p'li yön (A = bağımlı bacak)
+  adf_lags: 1
+  max_coint_candidates: 3000   # korelasyon ön filtresinden geçen en yüksek korelasyonlu adaylar
+  beta_bounds: [0.2, 5.0]      # dışındaki (negatif dahil) beta'lar dışlanır
+  stability_subwindows: 4      # 28 gün -> 4 x 7 gün (beta / coint stabilitesi)
+  hurst_lags: [2, 20]          # bar
+  min_edge_cost_ratio: 1.0     # formation ön filtresi; işlem bazlı gate Faz 3 (cost_multiplier)
+  cost_est_gross_notional_usdt: 2000
+  half_life_method: ewma_deviation  # level | ewma_deviation (spread − EWMA; kullanıcı kararı Faz 2)
+  jump_mad_k: 8.0              # |ΔS| > k·robust_std(ΔS) → sıçrama bar'ı
+  max_jump_frac: 0.005         # kısa pencerede sıçrama oranı üst sınırı (aşarsa red, yoksa kırp)
   score_weights:               # RAPOR §8.3 — test dönemine göre optimize ETME
     coint_stability: 0.25
     mean_reversion_quality: 0.20

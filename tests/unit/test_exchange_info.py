@@ -119,3 +119,15 @@ def test_derive_tick_size_robust_to_outliers() -> None:
 def test_derive_tick_size_rejects_bad_fraction() -> None:
     with pytest.raises(ValueError, match="min_fraction"):
         derive_tick_size(np.array([1.0]), min_fraction=0.0)
+
+
+def test_derived_ticks_roundtrip(tmp_path: Path) -> None:
+    from pairs_bt.data.exchange_info import load_derived_ticks
+
+    path = tmp_path / "derived_ticks.json"
+    path.write_text(
+        json.dumps({"BTCUSDT": [[1000, "0.1"], [2000, "0.01"]], "ETHUSDT": []}), encoding="utf-8"
+    )
+    ticks = load_derived_ticks(path)
+    assert ticks["BTCUSDT"] == [(1000, Decimal("0.1")), (2000, Decimal("0.01"))]
+    assert ticks["ETHUSDT"] == []

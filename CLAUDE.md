@@ -58,7 +58,8 @@ src/pairs_bt/
 
 **Bağımlılık yönü (ihlal etme):**
 `domain` ← herkes. `models`, `costs` → sadece `domain`. `data` → `domain`, `config`.
-`research` → `domain`, `models`, `data`.
+`research` → `domain`, `models`, `data`, `costs` (formation edge/maliyet tahmini cost gate ile
+aynı saf fonksiyonları kullansın diye — kullanıcı kararı, Faz 2).
 `strategy` → `models`, `costs`, `domain`. `execution` → `costs`, `domain`. `portfolio` → `domain`.
 `backtest` her şeyi orkestre eder; başka hiçbir modül `backtest`'i import etmez.
 `analytics` yalnızca ledger/trade kayıtlarını okur, state değiştirmez.
@@ -207,6 +208,35 @@ Bunlar backtest'in güvenilirliğini belirler. Bir değişiklik bunlardan birini
   Faz 2 UniverseFilter likidite filtresinde `trades`/`quote_volume` kullanılmalı.
 - aggTrades yalnız pilot: BTCUSDT/ETHUSDT 2025-09-01..02 (7.7 M satır). Toplu indirme Faz 4.
 
+### 7.3 Faz 2 research konvansiyonları ve bulgular (2026-10-24)
+
+- Formation: 5m panel (`research.panel`, `artifacts/cache/panel_<hash>` memmap önbelleği), pencere
+  `(cutoff − gün, cutoff]` (`research.window`). Refresh'ler bağımsız → paralel, cutoff sıralı çıktı.
+- EG iki yönde test edilir, düşük p'li yön seçilir (A = bağımlı bacak). Beta `[0.2, 5.0]` dışı red.
+  Spread/HL/Hurst: kısa pencere, uzun pencere alpha/beta ile. Maliyet tahmini `costs.estimates`
+  (taker fee + liquidity-scaled slippage + leg-risk rezervi; funding hariç).
+- Script: `uv run python scripts/build_pair_universe.py --workers 16` (tam yıl ~8 dk) →
+  `artifacts/pair_universe/<run_id>/` (diagnostics/universe/symbol_eligibility/refresh_summary parquet,
+  summary.md, run_meta.json, config_resolved.yaml).
+- **Half-life (kullanıcı kararı, Faz 2):** spread SEVİYESİNİN HL'i veride saatlerce (medyan
+  ~4.5–5.5 saat; 3–45 dk'ya düşen aday 11 ayda 31). Bu yüzden `half_life_method: ewma_deviation`:
+  HL, sinyalin trade ettiği `S − EWMA_mean(S)` sapmasında ölçülür (EWMA HL = `models.zscore`).
+  RW'nin sapma HL'i = EWMA HL olduğundan config validator `half_life_minutes` üst sınırını EWMA
+  HL'inin altında tutar.
+- **Sıçrama filtresi:** `|ΔS| > jump_mad_k·robust_std` bar'ları; kısa pencerede oranı
+  `max_jump_frac`'ı aşan pair `JUMP` ile reddedilir, aşmayanlarda artışlar kırpılır. 10 Ekim 2025
+  çöküşünün ürettiği sahte seçimleri (eski run'da 11–17 Ekim'de 30 pair/refresh) temizler.
+- **Kabul edilen risk (karar B):** RW seviye + hızlı gürültü spread'leri EG'yi ve sapma HL'ini
+  geçebilir (sentetik testte kanıtlı). Seçilenler `spurious_risk = seviye HL > half_life_max` ile
+  işaretlenir; gerçek veride seçimlerin %99.9'u bayraklı (seviye HL medyan ~281 dk, beta CV medyan
+  0.25). Seçim cointegration değil kısa vadeli göreli değerdir; Faz 3 sonuçları bu bayrakla ayrıştırılmalı.
+- **Edge ince:** formation tahmininde edge/maliyet medyan 1.21 (P90 1.58), signal `cost_multiplier`
+  ise 3 → Faz 3 cost gate'inde çoğu işlem reddedilecek. Maliyet: taker 5 bps/bacak + slippage
+  (k2·vol_1m terimi baskın) + leg rezervi ≈ 32 bps round-trip medyan. Gerçek fee tier/maker oranı
+  kullanıcıdan alınmadı.
+- Likidite: `min_quote_volume_24h_usdt = 20M` refresh başına medyan ~441 sembolü eliyor; universe
+  medyan 78 sembol.
+
 ## 8. Reproducibility
 
 Her backtest run'ı `artifacts/<run_id>/` altına şunları yazar: çözümlenmiş config (YAML),
@@ -216,8 +246,9 @@ trade blotter (parquet), equity curve, metrikler (JSON), log. `run_id = <UTC tar
 ## 9. Geliştirme yol haritası (RAPOR §16)
 
 Sırayla ilerle; bir faz çıkış kriterini karşılamadan sonrakine geçme.
-Mevcut faz: **Faz 1 — Data tamam** (13 ay 1m/5m + funding + exchange-info, 0 doğrulama hatası;
-bkz. §7.2). Faz 2'ye hazır.
+Mevcut faz: **Faz 2 — Research tamam** (kullanıcı kararı B ile kapatıldı, bkz. §7.3). Faz 3'e hazır.
+Teslim run'ı: `artifacts/pair_universe/20261024_37811702` (refresh başına medyan 2 pair, %30'unda 0;
+seçimlerin %99.9'u `spurious_risk`; beklenen net medyan 6.5 bps, edge/maliyet medyan 1.21).
 
 | Faz | Teslim | Çıkış kriteri |
 |---|---|---|

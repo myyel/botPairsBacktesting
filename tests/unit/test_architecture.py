@@ -15,7 +15,7 @@ ALLOWED: dict[str, set[str]] = {
     "models": {"domain"},
     "costs": {"domain"},
     "data": {"domain", "config"},
-    "research": {"domain", "models", "data", "config"},
+    "research": {"domain", "models", "data", "config", "costs"},
     "strategy": {"models", "costs", "domain", "config"},
     "execution": {"costs", "domain", "config"},
     "portfolio": {"domain", "config"},

@@ -147,3 +147,9 @@ def derive_tick_size(prices: npt.NDArray[np.float64], min_fraction: float = 1.0)
         if on_grid.mean() >= min_fraction:
             return tick.normalize()
     return None
+
+
+def load_derived_ticks(path: Path) -> dict[str, list[tuple[int, Decimal]]]:
+    """`data/manifests/derived_ticks.json` -> {sembol: [(valid_from_ms, tick), ...]}."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {s: [(int(ts), Decimal(t)) for ts, t in v] for s, v in sorted(raw.items())}

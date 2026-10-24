@@ -33,6 +33,11 @@ class MarketConfig(_Frozen):
     max_ffill_bars: int = Field(ge=0, default=3)
     min_listing_age_days: int = Field(ge=0, default=30)
     min_quote_volume_24h_usdt: float = Field(ge=0, default=0.0)
+    # UniverseFilter (RAPOR §8.1): formation penceresinde stale olmayan bar oranı alt sınırı ve
+    # işlemsiz (quote_volume == 0) bar oranı üst sınırı
+    min_coverage: float = Field(gt=0, le=1, default=0.98)
+    max_zero_trade_frac: float = Field(ge=0, lt=1, default=0.05)
+    contract_types: tuple[str, ...] = ("PERPETUAL",)  # RAPOR §8.1; TRADIFI_PERPETUAL bilinçli hariç
     exclude_symbols: tuple[str, ...] = ()
 
 
@@ -64,20 +69,52 @@ class PairSelectionConfig(_Frozen):
     active_pairs: int = Field(gt=0)
     max_pairs_per_asset: int = Field(gt=0)
     score_weights: ScoreWeights
+    # --- Faz 2 (RAPOR §8.2) ---
+    # EG asimetrik: iki yön test edilir, düşük p'li yön seçilir (kullanıcı kararı, Faz 2).
+    eg_direction: Literal["min_p"] = "min_p"
+    adf_lags: int = Field(ge=0, default=1)  # EG residual ADF'deki sabit gecikme sayısı
+    max_coint_candidates: int = Field(
+        gt=0, default=3000
+    )  # korelasyon ön filtresi sonrası üst sınır
+    beta_bounds: tuple[float, float] = (0.2, 5.0)  # dışındaki (negatif dahil) beta'lar dışlanır
+    stability_subwindows: int = Field(ge=2, default=4)  # uzun pencerenin bölündüğü alt pencere
+    hurst_lags: tuple[int, int] = (2, 20)  # [min, max] gecikme (bar)
+    # formation'da tahmini brüt yakınsama / round-trip maliyet alt sınırı (ön filtre; asıl
+    # cost gate Faz 3'te işlem bazında signal.cost_multiplier ile uygulanır)
+    min_edge_cost_ratio: float = Field(gt=0, default=1.0)
+    # slippage tahmini için varsayılan pair brüt notional'ı (sizing Faz 3'te)
+    cost_est_gross_notional_usdt: float = Field(gt=0, default=2000.0)
+    # half-life neyin üzerinde ölçülür (kullanıcı kararı, Faz 2):
+    #   level          = spread seviyesi (OU, RAPOR §3.3)
+    #   ewma_deviation = spread − EWMA ortalaması (sinyalin trade ettiği sapma, §3.2);
+    #                    RW için HL = EWMA HL → half_life_minutes üst sınırı ondan küçük olmalı
+    half_life_method: Literal["level", "ewma_deviation"] = "ewma_deviation"
+    # sıçrama filtresi: |ΔS| > jump_mad_k · robust_std(ΔS) olan bar'lar sıçramadır; kısa
+    # pencerede oranları max_jump_frac'ı aşarsa pair reddedilir, aşmazsa artışlar kırpılır
+    jump_mad_k: float = Field(gt=0, default=8.0)
+    max_jump_frac: float = Field(ge=0, le=1, default=0.005)
 
     @model_validator(mode="after")
     def _check(self) -> PairSelectionConfig:
         lo, hi = self.half_life_minutes
         if not 0 < lo < hi:
             raise ValueError("half_life_minutes [min, max] ve 0 < min < max olmalı")
+        b_lo, b_hi = self.beta_bounds
+        if not 0 < b_lo < b_hi:
+            raise ValueError("beta_bounds [min, max] ve 0 < min < max olmalı")
+        h_lo, h_hi = self.hurst_lags
+        if not 2 <= h_lo < h_hi:
+            raise ValueError("hurst_lags [min, max] ve 2 <= min < max olmalı")
         if self.short_window_days >= self.long_window_days:
             raise ValueError("short_window_days < long_window_days olmalı")
         return self
 
 
 class KalmanConfig(_Frozen):
-    delta: float = Field(gt=0)
-    obs_var: float = Field(gt=0)
+    """models.KalmanHedgeModel (RAPOR §3.1): durum gürültüsü q = delta / (1 − delta)."""
+
+    delta: float = Field(gt=0, lt=1)
+    obs_var: float = Field(gt=0)  # gözlem gürültüsü varyansı (log-fiyat birimi²)
 
 
 class ZScoreConfig(_Frozen):
@@ -196,6 +233,20 @@ class StrategyConfig(_Frozen):
     execution: ExecutionConfig
     costs: CostsConfig
     walk_forward: WalkForwardConfig
+
+    @model_validator(mode="after")
+    def _half_life_vs_ewma(self) -> StrategyConfig:
+        ps = self.pair_selection
+        if ps.half_life_method == "ewma_deviation":
+            exec_min = {"1m": 1.0, "5m": 5.0}[self.market.execution_interval]
+            ewma_hl_min = self.models.zscore.ewma_halflife_bars * exec_min
+            if not ps.half_life_minutes[1] < ewma_hl_min:
+                raise ValueError(
+                    "half_life_method=ewma_deviation: half_life_minutes üst sınırı EWMA "
+                    f"half-life'ından ({ewma_hl_min:g} dk) küçük olmalı (aksi halde random walk "
+                    "da filtreyi geçer)"
+                )
+        return self
 
     def config_hash(self) -> str:
         """Çözümlenmiş config'in deterministik SHA-256 hash'i (reproducibility, CLAUDE.md §8)."""

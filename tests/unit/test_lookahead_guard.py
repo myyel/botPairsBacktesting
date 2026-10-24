@@ -15,6 +15,7 @@ import pytest
 
 from pairs_bt.data.normalize import KLINES_SCHEMA
 from pairs_bt.data.synchronizer import TimeSynchronizer
+from pairs_bt.models import KalmanHedgeModel, KalmanState, ZScoreModel
 
 SeriesFn = Callable[[np.ndarray], np.ndarray]
 
@@ -64,10 +65,24 @@ def _synchronizer_close(x: np.ndarray) -> np.ndarray:
     return panel.close.ravel()[::2] + np.nan_to_num(panel.close.ravel()[1::2])
 
 
+def _zscore_model(x: np.ndarray) -> np.ndarray:
+    return ZScoreModel(60).run(x).z
+
+
+def _kalman_spread_z(x: np.ndarray) -> np.ndarray:
+    """x = ln A; ln B sabit bir random walk. Kalman inovasyonu + beta + z-score zinciri."""
+    log_b = np.cumsum(np.full(x.size, 0.001)) + 4.0
+    path = KalmanHedgeModel(1e-4, 1e-3).run(
+        x, log_b, KalmanState(0.0, 1.0, p_aa=1.0, p_ab=0.0, p_bb=1.0)
+    )
+    return path.beta + ZScoreModel(30).run(path.innovation).z
+
+
 CAUSAL_FUNCTIONS: list[SeriesFn] = [
     _ewma_zscore_reference,
     _synchronizer_close,
-    # TODO(faz-2): models.ZScoreModel, models.KalmanHedgeModel spread çıktısı vb. ekle
+    _zscore_model,
+    _kalman_spread_z,
 ]
 
 

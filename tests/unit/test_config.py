@@ -113,3 +113,72 @@ def test_data_config_rejects_duplicate_dataset(data_config: DataConfig) -> None:
 def test_data_config_hash_is_deterministic(data_config: DataConfig) -> None:
     clone = DataConfig.model_validate(data_config.model_dump())
     assert clone.config_hash() == data_config.config_hash()
+
+
+# ---------------------------------------------------------------- Faz 2 alanları
+
+
+def test_research_fields_load(strategy_config: StrategyConfig) -> None:
+    ps = strategy_config.pair_selection
+    assert ps.eg_direction == "min_p"
+    assert ps.beta_bounds == (0.2, 5.0)
+    assert ps.adf_lags >= 0
+    assert ps.hurst_lags[0] < ps.hurst_lags[1]
+    assert ps.stability_subwindows >= 2
+    m = strategy_config.market
+    assert 0 < m.min_coverage <= 1
+    assert 0 <= m.max_zero_trade_frac < 1
+    assert "USDCUSDT" in m.exclude_symbols
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("beta_bounds", (5.0, 0.2)),
+        ("beta_bounds", (-1.0, 2.0)),
+        ("hurst_lags", (10, 2)),
+        ("hurst_lags", (1, 10)),
+        ("stability_subwindows", 1),
+        ("max_coint_candidates", 0),
+    ],
+)
+def test_invalid_research_values_rejected(
+    strategy_config: StrategyConfig, key: str, value: object
+) -> None:
+    data = strategy_config.model_dump()
+    data["pair_selection"][key] = value
+    with pytest.raises(ValidationError):
+        StrategyConfig.model_validate(data)
+
+
+@pytest.mark.parametrize(("key", "value"), [("delta", 1.0), ("delta", 0.0), ("obs_var", 0.0)])
+def test_invalid_kalman_values_rejected(
+    strategy_config: StrategyConfig, key: str, value: float
+) -> None:
+    data = strategy_config.model_dump()
+    data["models"]["kalman"][key] = value
+    with pytest.raises(ValidationError):
+        StrategyConfig.model_validate(data)
+
+
+def test_ewma_deviation_requires_hl_max_below_ewma_halflife(
+    strategy_config: StrategyConfig,
+) -> None:
+    """RW'nin EWMA sapma HL'i = EWMA HL; üst sınır onun altında değilse filtre anlamsızdır."""
+    data = strategy_config.model_dump()
+    assert data["pair_selection"]["half_life_method"] == "ewma_deviation"
+    data["pair_selection"]["half_life_minutes"] = (3, 90)  # EWMA HL = 60 × 1m
+    with pytest.raises(ValidationError, match="EWMA"):
+        StrategyConfig.model_validate(data)
+    data["pair_selection"]["half_life_method"] = "level"
+    StrategyConfig.model_validate(data)
+
+
+@pytest.mark.parametrize(("key", "value"), [("jump_mad_k", 0.0), ("max_jump_frac", 1.5)])
+def test_invalid_jump_values_rejected(
+    strategy_config: StrategyConfig, key: str, value: float
+) -> None:
+    data = strategy_config.model_dump()
+    data["pair_selection"][key] = value
+    with pytest.raises(ValidationError):
+        StrategyConfig.model_validate(data)
